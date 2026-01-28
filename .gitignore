@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+
+# Virtual environment
+env/
+venv/
+
+# Streamlit
+.streamlit/
+
+# Logs & output
+*.log
+output/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/

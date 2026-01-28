@@ -1,0 +1,182 @@
+llm_engine.py:
+
+import subprocess
+import json
+import re
+
+MODEL = "mistral:7b-instruct"
+
+def extract_json(text):
+    match = re.search(r"\{[\s\S]*\}", text)
+    return match.group(0) if match else None
+
+
+def generate_summary_and_mitigation(log: str, severity: str) -> dict:
+    prompt = f"""
+You are an experienced SOC Analyst.
+
+TASK:
+Explain the security log in a way that a NORMAL PERSON (non-technical) can understand.
+
+AUDIENCE:
+- SOC trainee
+- Manager
+- Non-security background
+
+RESPONSE RULES (VERY IMPORTANT):
+- Respond ONLY in valid JSON
+- Do NOT include markdown
+- Do NOT include explanations outside JSON
+- Be detailed, clear, and human-readable
+
+CONTENT REQUIREMENTS:
+1. Summary must be AT LEAST 4–6 full sentences.
+2. Explain:
+   - What happened
+   - Why it is risky (or not)
+   - What could happen if ignored
+3. Mitigation steps must be:
+   - Clear
+   - Actionable
+   - Written as full sentences
+   - Minimum 4 steps
+
+JSON FORMAT:
+{{
+  "alert": "Short alert title",
+  "summary": "Detailed human-readable explanation",
+  "mitigation": [
+    "Step 1 explanation",
+    "Step 2 explanation",
+    "Step 3 explanation",
+    "Step 4 explanation"
+  ]
+}}
+
+Severity Level: {severity}
+
+Log Entry:
+{log}
+"""
+
+    result = subprocess.run(
+        ["ollama", "run", MODEL],
+        input=prompt,
+        text=True,
+        capture_output=True
+    )
+
+    raw_output = result.stdout.strip()
+
+    try:
+        json_text = extract_json(raw_output)
+        if not json_text:
+            raise ValueError("No JSON detected")
+
+        return json.loads(json_text)
+
+    except Exception as e:
+        print("⚠️ RAW LLM OUTPUT:\n", raw_output)
+        print("ERROR:", e)
+
+        return {
+            "alert": "Unclassified Security Event",
+            "summary": (
+                "The system detected an activity in the log file, but it could not be "
+                "clearly classified at this time. This may indicate incomplete log data "
+                "or an unfamiliar pattern. Further manual review is recommended."
+            ),
+            "mitigation": [
+                "Review the full log entry manually to understand the activity.",
+                "Check related logs from the same time period for correlation.",
+                "Monitor the source IP or user account involved.",
+                "Escalate to a senior analyst if similar logs repeat."
+            ]
+        }
+
+
+
+NEW FILE: elastic_client.py:
+
+from elasticsearch import Elasticsearch
+
+ES_HOST = "http://localhost:9200"
+INDEX_NAME = "soc-logs"
+
+es = Elasticsearch(ES_HOST)
+
+def fetch_latest_logs(size=100):
+    response = es.search(
+        index=INDEX_NAME,
+        size=size,
+        sort=[{"@timestamp": "desc"}],
+        query={"match_all": {}}
+    )
+
+    logs = []
+    for hit in response["hits"]["hits"]:
+        src = hit["_source"]
+        logs.append({
+            "log": src.get("log", ""),
+            "platform": src.get("platform", "Unknown"),
+            "timestamp": src.get("@timestamp")
+        })
+
+    return logs
+
+
+NEW FILE: langchain_pipeline.py:
+
+from langchain.llms import Ollama
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+
+llm = Ollama(model="mistral:7b-instruct", temperature=0.3)
+
+prompt = PromptTemplate(
+    input_variables=["log", "severity"],
+    template="""
+You are a SOC analyst.
+
+Explain the following log clearly for a non-technical person.
+
+Log:
+{log}
+
+Severity:
+{severity}
+
+Provide a clear explanation and suggested response.
+"""
+)
+
+chain = LLMChain(llm=llm, prompt=prompt)
+
+def explain_log(log, severity):
+    return chain.run(log=log, severity=severity)
+
+
+
+
+add this code to ==>> app.py :
+
+st.subheader("📈 Platform-wise Severity Trend")
+
+if "platform" in df_logs.columns:
+    platform_sev = (
+        df_logs
+        .groupby(["platform", "severity"])
+        .size()
+        .reset_index(name="count")
+    )
+
+    fig2 = px.bar(
+        platform_sev,
+        x="platform",
+        y="count",
+        color="severity",
+        title="Severity Distribution by Platform"
+    )
+
+    st.plotly_chart(fig2, use_container_width=True)
+
