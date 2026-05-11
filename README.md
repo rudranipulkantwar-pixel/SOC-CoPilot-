@@ -136,7 +136,7 @@ Built an AI-powered SOC dashboard using Python, Streamlit, LangChain, and MITRE 
 
 ### 👤 Author
 
-Nilesh Rakhade
+Rudrani Pulkantwar
 SOC & Security Enthusiast
 GitHub: https://github.com/Nileshrak305
 
